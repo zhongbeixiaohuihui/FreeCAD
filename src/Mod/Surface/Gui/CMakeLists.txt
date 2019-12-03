@@ -28,7 +28,6 @@ set(SurfaceGui_MOC_HDRS
     TaskFillingUnbound.h
     TaskFillingVertex.h
     TaskGeomFillSurface.h
-	TaskGeomConnectionWire.h
 )
 fc_wrap_cpp(SurfaceGui_MOC_SRCS ${SurfaceGui_MOC_HDRS})
 SOURCE_GROUP("Moc" FILES ${SurfaceGui_MOC_SRCS})
@@ -63,8 +62,6 @@ SET(SurfaceGui_SRCS
     TaskFillingVertex.h
     TaskGeomFillSurface.cpp
     TaskGeomFillSurface.h
-	TaskGeomConnectionWire.cpp
-    TaskGeomConnectionWire.h
     AppSurfaceGui.cpp
     Command.cpp
     PreCompiled.cpp
