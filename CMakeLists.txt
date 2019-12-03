@@ -324,7 +324,6 @@ option(BUILD_TUX "Build the FreeCAD Tux module" ON)
 option(BUILD_WEB "Build the FreeCAD web module" ON)
 option(BUILD_SURFACE "Build the FreeCAD surface module" ON)
 option(BUILD_VR "Build the FreeCAD Oculus Rift support (need Oculus SDK 4.x or higher)" OFF)
-option(BUILD_IMPELLER "Build the FreeCAD IMPELLER module" ON)
 
 if(MSVC)
     option(BUILD_FEM_NETGEN "Build the FreeCAD FEM module with the NETGEN mesher" ON)

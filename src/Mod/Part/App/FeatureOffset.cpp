@@ -73,7 +73,7 @@ short Offset::mustExecute() const
         return 1;
     return 0;
 }
-  
+
 App::DocumentObjectExecReturn *Offset::execute(void)
 {
     App::DocumentObject* source = Source.getValue();

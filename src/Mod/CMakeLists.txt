@@ -146,7 +146,3 @@ endif(BUILD_ADDONMGR)
 if(BUILD_TUX)
     add_subdirectory(Tux)
 endif(BUILD_TUX)
-
-if(BUILD_IMPELLER)
-  add_subdirectory(Impeller)
-endif(BUILD_IMPELLER)
