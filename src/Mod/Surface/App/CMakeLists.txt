@@ -25,6 +25,8 @@ SET(Surface_SRCS
     FeatureExtend.h
     FeatureGeomFillSurface.cpp
     FeatureGeomFillSurface.h
+    FeatureGeomLinkWire.cpp
+    FeatureGeomLinkWire.h
     FeatureFilling.cpp
     FeatureFilling.h
     FeatureSewing.cpp
