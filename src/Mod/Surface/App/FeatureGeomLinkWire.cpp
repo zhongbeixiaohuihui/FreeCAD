@@ -57,29 +57,27 @@
 
 using namespace Surface;
 
-
 PROPERTY_SOURCE(Surface::GeomLinkWire, Part::Spline)
-
-const char* GeomLinkWire::FillTypeEnums[]    = {"Stretched", "Coons", "Curved", NULL};
 
 GeomLinkWire::GeomLinkWire(): Spline()
 {
-    ADD_PROPERTY(FillType, ((long)0));
+ 
     ADD_PROPERTY(BoundaryList, (0, "Dummy"));
-    ADD_PROPERTY(ReversedList, (false));
-    FillType.setEnums(FillTypeEnums);
+	ADD_PROPERTY(ShapeList, (0, "Dummy"));
     BoundaryList.setScope(App::LinkScope::Global);
+	ShapeList.setScope(App::LinkScope::Global);
 }
 
 
 //Check if any components of the surface have been modified
 short GeomLinkWire::mustExecute() const
 {
-    if (BoundaryList.isTouched() ||
-        ReversedList.isTouched() ||
-        FillType.isTouched()) {
+    if (BoundaryList.isTouched()) {
         return 1;
     }
+	if (ShapeList.isTouched()) {
+		return 1;
+	}
     return Spline::mustExecute();
 }
 
@@ -87,10 +85,7 @@ void GeomLinkWire::onChanged(const App::Property* prop)
 {
     if (isRestoring()) {
         if (prop == &BoundaryList) {
-            // auto-adjusting size of this list
-            if (BoundaryList.getSize() != ReversedList.getSize()) {
-                ReversedList.setSize(BoundaryList.getSize());
-            }
+            
         }
     }
     Part::Spline::onChanged(prop);
@@ -98,226 +93,27 @@ void GeomLinkWire::onChanged(const App::Property* prop)
 
 App::DocumentObjectExecReturn *GeomLinkWire::execute(void)
 {
-    try {
-        TopoDS_Wire aWire;
+    //try {
+    //    TopoDS_Wire aWire;
 
-        //Gets the healed wire
-        if (getWire(aWire)) {
-            createBezierSurface(aWire);
-        }
-        else {
-            createBSplineSurface(aWire);
-        }
+    //    //Gets the healed wire
+    //    if (getWire(aWire)) {
+    //        createBezierSurface(aWire);
+    //    }
+    //    else {
+    //        createBSplineSurface(aWire);
+    //    }
 
-        return App::DocumentObject::StdReturn;
-    }
-    catch (Standard_ConstructionError&) {
-        // message is in a Latin language, show a normal one
-        return new App::DocumentObjectExecReturn("Curves are disjoint.");
-    }
-    catch (StdFail_NotDone&) {
-        return new App::DocumentObjectExecReturn("A curve was not a B-spline and could not be converted into one.");
-    }
-    catch (Standard_Failure& e) {
-        return new App::DocumentObjectExecReturn(e.GetMessageString());
-    }
-}
-
-GeomFill_FillingStyle GeomLinkWire::getFillingStyle()
-{
-    //Identify filling style
-    switch (FillType.getValue()) {
-    case GeomFill_StretchStyle:
-    case GeomFill_CoonsStyle:
-    case GeomFill_CurvedStyle:
-        return static_cast<GeomFill_FillingStyle>(FillType.getValue());
-    default:
-        Standard_Failure::Raise("Filling style must be 0 (Stretch), 1 (Coons), or 2 (Curved).\n");
-        throw; // this is to shut up the compiler
-    }
-}
-
-bool GeomLinkWire::getWire(TopoDS_Wire& aWire)
-{
-    Handle(ShapeFix_Wire) aShFW = new ShapeFix_Wire;
-    Handle(ShapeExtend_WireData) aWD = new ShapeExtend_WireData;
-
-    std::vector<App::PropertyLinkSubList::SubSet> boundary = BoundaryList.getSubListValues();
-    if (boundary.size() > 4) {// if too many not even try
-        Standard_Failure::Raise("Only 2-4 curves are allowed\n");
-    }
-
-	Surface::ShapeValidator validator;
-    for(std::size_t i = 0; i < boundary.size(); i++) {
-        App::PropertyLinkSubList::SubSet set = boundary[i];
-
-        if (set.first->getTypeId().isDerivedFrom(Part::Feature::getClassTypeId())) {
-            for (auto jt: set.second) {
-                const Part::TopoShape &ts = static_cast<Part::Feature*>(set.first)->Shape.getShape();
-                validator.checkAndAdd(ts, jt.c_str(), &aWD);
-            }
-        }
-        else {
-            Standard_Failure::Raise("Curve not from Part::Feature\n");
-        }
-    }
-
-    if (validator.numEdges() < 2 || validator.numEdges() > 4) {
-        Standard_Failure::Raise("Only 2-4 curves are allowed\n");
-    }
-
-    //Reorder the curves and fix the wire if required
-
-    aShFW->Load(aWD); //Load in the wire
-    aShFW->FixReorder(); //Fix the order of the edges if required
-    aShFW->ClosedWireMode() = Standard_True; //Enables closed wire mode
-    aShFW->FixConnected(); //Fix connection between wires
-    aShFW->FixSelfIntersection(); //Fix Self Intersection
-    aShFW->Perform(); //Perform the fixes
-
-    aWire = aShFW->Wire(); //Healed Wire
-
-    if (aWire.IsNull()) {
-        Standard_Failure::Raise("Wire unable to be constructed\n");
-    }
-
-    return validator.isBezier();
-}
-
-void GeomLinkWire::createFace(const Handle(Geom_BoundedSurface) &aSurface)
-{
-    BRepBuilderAPI_MakeFace aFaceBuilder;
-    Standard_Real u1, u2, v1, v2;
-    // transfer surface bounds to face
-    aSurface->Bounds(u1, u2, v1, v2);
-    aFaceBuilder.Init(aSurface, u1, u2, v1, v2, Precision::Confusion());
-
-    TopoDS_Face aFace = aFaceBuilder.Face();
-
-    if (!aFaceBuilder.IsDone()) {
-        Standard_Failure::Raise("Face unable to be constructed\n");
-    }
-    if (aFace.IsNull()) {
-        Standard_Failure::Raise("Resulting Face is null\n");
-    }
-    this->Shape.setValue(aFace);
-}
-
-void GeomLinkWire::createBezierSurface(TopoDS_Wire& aWire)
-{
-    std::vector<Handle(Geom_BezierCurve)> curves;
-    curves.reserve(4);
-
-    Standard_Real u1, u2; // contains output
-    TopExp_Explorer anExp (aWire, TopAbs_EDGE);
-    for (; anExp.More(); anExp.Next()) {
-        const TopoDS_Edge hedge = TopoDS::Edge (anExp.Current());
-        TopLoc_Location heloc; // this will be output
-        Handle(Geom_Curve) c_geom = BRep_Tool::Curve(hedge, heloc, u1, u2); //The geometric curve
-        Handle(Geom_BezierCurve) bezier = Handle(Geom_BezierCurve)::DownCast(c_geom); //Try to get Bezier curve
-
-        if (!bezier.IsNull()) {
-            gp_Trsf transf = heloc.Transformation();
-            bezier->Transform(transf); // apply original transformation to control points
-            //Store Underlying Geometry
-            curves.push_back(bezier);
-        }
-        else {
-            Standard_Failure::Raise("Curve not a Bezier Curve");
-        }
-    }
-
-    GeomFill_FillingStyle fstyle = getFillingStyle();
-    GeomFill_BezierCurves aSurfBuilder; //Create Surface Builder
-
-    std::size_t edgeCount = curves.size();
-    const boost::dynamic_bitset<>& booleans = ReversedList.getValues();
-    if (edgeCount == booleans.size()) {
-        for (std::size_t i=0; i<edgeCount; i++) {
-            if (booleans[i])
-                curves[i]->Reverse();
-        }
-    }
-
-    if (edgeCount == 2) {
-        aSurfBuilder.Init(curves[0], curves[1], fstyle);
-    }
-    else if (edgeCount == 3) {
-        aSurfBuilder.Init(curves[0], curves[1], curves[2], fstyle);
-    }
-    else if (edgeCount == 4) {
-        aSurfBuilder.Init(curves[0], curves[1], curves[2], curves[3], fstyle);
-    }
-
-    createFace(aSurfBuilder.Surface());
-}
-
-void GeomLinkWire::createBSplineSurface(TopoDS_Wire& aWire)
-{
-    std::vector<Handle(Geom_BSplineCurve)> curves;
-    curves.reserve(4);
-    Standard_Real u1, u2; // contains output
-    TopExp_Explorer anExp (aWire, TopAbs_EDGE);
-    for (; anExp.More(); anExp.Next()) {
-        const TopoDS_Edge& edge = TopoDS::Edge (anExp.Current());
-        TopLoc_Location heloc; // this will be output
-        Handle(Geom_Curve) c_geom = BRep_Tool::Curve(edge, heloc, u1, u2); //The geometric curve
-        Handle(Geom_BSplineCurve) bspline = Handle(Geom_BSplineCurve)::DownCast(c_geom); //Try to get BSpline curve
-
-        if (!bspline.IsNull()) {
-            gp_Trsf transf = heloc.Transformation();
-            bspline->Transform(transf); // apply original transformation to control points
-            //Store Underlying Geometry
-            curves.push_back(bspline);
-        }
-        else {
-            // try to convert it into a B-spline
-            BRepBuilderAPI_NurbsConvert mkNurbs(edge);
-            TopoDS_Edge nurbs = TopoDS::Edge(mkNurbs.Shape());
-            // avoid copying
-            TopLoc_Location heloc2; // this will be output
-            Handle(Geom_Curve) c_geom2 = BRep_Tool::Curve(nurbs, heloc2, u1, u2); //The geometric curve
-            Handle(Geom_BSplineCurve) bspline2 = Handle(Geom_BSplineCurve)::DownCast(c_geom2); //Try to get BSpline curve
-
-            if (!bspline2.IsNull()) {
-                gp_Trsf transf = heloc2.Transformation();
-                bspline2->Transform(transf); // apply original transformation to control points
-                //Store Underlying Geometry
-                curves.push_back(bspline2);
-            }
-            else {
-                // BRepBuilderAPI_NurbsConvert failed, try ShapeConstruct_Curve now
-                ShapeConstruct_Curve scc;
-                Handle(Geom_BSplineCurve) spline = scc.ConvertToBSpline(c_geom, u1, u2, Precision::Confusion());
-                if (spline.IsNull())
-                    Standard_Failure::Raise("A curve was not a B-spline and could not be converted into one.");
-                gp_Trsf transf = heloc2.Transformation();
-                spline->Transform(transf); // apply original transformation to control points
-                curves.push_back(spline);
-            }
-        }
-    }
-
-    GeomFill_FillingStyle fstyle = getFillingStyle();
-    GeomFill_BSplineCurves aSurfBuilder; //Create Surface Builder
-
-    std::size_t edgeCount = curves.size();
-    const boost::dynamic_bitset<>& booleans = ReversedList.getValues();
-    if (edgeCount == booleans.size()) {
-        for (std::size_t i=0; i<edgeCount; i++) {
-            if (booleans[i])
-                curves[i]->Reverse();
-        }
-    }
-    if (edgeCount == 2) {
-        aSurfBuilder.Init(curves[0], curves[1], fstyle);
-    }
-    else if (edgeCount == 3) {
-        aSurfBuilder.Init(curves[0], curves[1], curves[2], fstyle);
-    }
-    else if (edgeCount == 4) {
-        aSurfBuilder.Init(curves[0], curves[1], curves[2], curves[3], fstyle);
-    }
-
-    createFace(aSurfBuilder.Surface());
+    //    return App::DocumentObject::StdReturn;
+    //}
+    //catch (Standard_ConstructionError&) {
+    //    // message is in a Latin language, show a normal one
+    //    return new App::DocumentObjectExecReturn("Curves are disjoint.");
+    //}
+    //catch (StdFail_NotDone&) {
+    //    return new App::DocumentObjectExecReturn("A curve was not a B-spline and could not be converted into one.");
+    //}
+    //catch (Standard_Failure& e) {
+    //    return new App::DocumentObjectExecReturn(e.GetMessageString());
+    //}
 }

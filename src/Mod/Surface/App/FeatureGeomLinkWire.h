@@ -43,28 +43,13 @@ class GeomLinkWire : public Part::Spline
 public:
 	GeomLinkWire();
     App::PropertyLinkSubList BoundaryList;  // Curves to be turned into a face (2-4 curves allowed).
-    //App::PropertyBoolList ReversedList;     // Booleans to handle orientation of the curves
-    //App::PropertyEnumeration FillType;      // Fill method (1, 2, or 3 for Stretch, Coons, and Curved)
-
+	App::PropertyLinkSubList ShapeList;     //Shapes cut tool.
+    
     short mustExecute() const;
     void onChanged(const App::Property*);
     App::DocumentObjectExecReturn *execute(void);
-
-    /// returns the type name of the view provider
-    const char* getViewProviderName(void) const {
-        return "SurfaceGui::ViewProviderGeomFillSurface";
-    }
-
-protected:
-    GeomFill_FillingStyle getFillingStyle();
-    /// True means that all edges have Bezier curves
-    bool getWire(TopoDS_Wire& aWire);
-    void createFace(const Handle(Geom_BoundedSurface) &aSurface);
-    void createBezierSurface(TopoDS_Wire& aWire);
-    void createBSplineSurface(TopoDS_Wire& aWire);
-
 private:
-    static const char* FillTypeEnums[];
+
 };
 
 }
